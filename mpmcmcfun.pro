@@ -52,6 +52,8 @@
 ;  status_MCMC:
 ;  gauss_fit_worked:
 ;  makecontours:
+;  silent or quiet: set either to not output any text
+;  temp_filename:
 ;  
 ;
 ;          
@@ -67,21 +69,23 @@
 ;
 ;      
 
- 
+;;git commit -a -m ''
 ;result=mpfitfun('mp_sngle_gauss_n2',wavel[index],data[index],err[index],p,parinfo=pi,/QUIET,status=status,DOF=DOF,PERROR=PERROR1)
 ;parinfo should have these 3: {fixed:0, limited:[1,1], limits:[0.D,1.2d], tied:''}
 ;calculated_params could be like ["p[1]*p[2]","p[4]*p[2]/P[6]"]
 function mpmcmcfun,MYFUNCT, X, Y, ERR, P,P_SIGMA,n_iter ,parinfo=parinfo,$
   PERROR=PERROR,calculated_params=calculated_params,titles=titles,makeplots=makeplots,status_MCMC=status_MCMC,$
-  gauss_fit_worked=gauss_fit_worked,makecontours=makecontours
+  gauss_fit_worked=gauss_fit_worked,makecontours=makecontours,silent=silent,quiet=quiet,temp_filename=temp_filename
 if n_params() ne 7 then message,'syntax: result=mpfitfun_mcmc(MYFUNCT, X, Y, ERR,'+$
   ' P,P_SIGMA,n_iter ,parinfo,PERROR=PERROR,calculated_params=calculated_params,titles=titles'+$
   ',makeplots=makeplots,status_MCMC=status_MCMC,$'+$
   'gauss_fit_worked=gauss_fit_worked,makecontours=makecontours)'
-status_MCMC=1
+  
 
 ;SET UP TIME COUNTER AND DEFAULT KEYWORDS.
 TIMEvar=systime(/seconds)
+status_MCMC=1
+if keyword_set(quiet) then silent=1
 if ~keyword_set(calculated_params) then begin
   calculated_params=[]
   calculate_pars=0
@@ -92,6 +96,7 @@ if ~keyword_set(calculated_params) then begin
     endelse
 if ~keyword_set(titles) then titles=replicate(' ',n_elements(P)+n_elements(calculated_params))
 if ~keyword_set(parinfo) then parinfo=replicate({fixed:0, limited:[0,0], limits:[0.D,0.d], tied:''},n_elements(p))
+if ~keyword_set(temp_filename) then temp_filename='~/mcmc_test.txt'
 
 ;ensure double precision
 xin=double(X)
@@ -102,7 +107,7 @@ guess=P
 guess_old=guess
 
 ;temporary text file to save mcmc chain
-openw,lun,'~/mcmc_test.txt',/get_lun
+openw,lun,temp_filename,/get_lun
 
 ;calculate formatting string.
 format_str=''
@@ -149,29 +154,11 @@ for i=0,n_elements(guess_small_indicies)-1 do $
 n_better=0
 n_worse=0
 np=float(n_elements(guess_small))
-;print,'there are '+ssi(np)+' free params'
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+;ENTER MAIN LOOP OF MCMC.
 for i=0l,n_iter do begin
-  if i mod 10000 eq 0 then print,'on step number '+ssi(i)
+  if i mod 10000 eq 0 then if ~keyword_set(silent) then print,'on step number '+ssi(i)
   ;change one random parameter by random amount 
   r=randomu(seed)
   for j=0,n_elements(guess_small)-1 do $
@@ -218,11 +205,8 @@ for i=0l,n_iter do begin
   endfor
 close,lun
 free_lun,lun
-print,'n better ',n_better,double(n_better)/double(n_iter)
-print,'n worse ', n_worse,double(n_worse)/double(n_iter)
-;catch,es
-;
-;print,es
+if ~keyword_set(silent) then print,'n better ',n_better,double(n_better)/double(n_iter)
+if ~keyword_set(silent) then print,'n worse ', n_worse,double(n_worse)/double(n_iter)
 
 if n_better lt 0.01*n_iter then begin
   help
@@ -235,20 +219,14 @@ if n_better lt 0.01*n_iter then begin
 
 
 
-
-
-
-
-
-
-
+;ENTER MAIN PLOTTING AND ANALYSIS SECTION.
 !p.multi=[0,1,1]
 return_value=[]
 return_value_errs=[]
 gauss_fit_worked=[]
-PRINT,'about to readcol'
+if ~keyword_set(silent) then PRINT,'about to readcol'
 
-t=execute('readcol,"~/mcmc_test.txt",'+readcol_str+'format="'+format_str+'"')
+t=execute('readcol,"'+temp_filename+'",'+readcol_str+'format="'+format_str+'",/silent')
 if t ne 1 then begin
   help
   print,'failure readcolng'
@@ -257,7 +235,7 @@ if t ne 1 then begin
   free_lun,lun
   return,p
   endif
-print,'after readcol'
+if ~keyword_set(silent) then print,'after readcol'
 for i=0,n_elements(guess)-1 do begin
   ;check if data was not fit and fixed to constant.
   skipguess=0
@@ -316,9 +294,7 @@ for i=0,n_elements(guess)-1 do begin
         skipcontour_location:
       endfor;contour j
     endif;contour keyword.
-  
-  
-  
+
 
   skipguess_location:
   if skipguess eq 1 then begin
@@ -327,7 +303,6 @@ for i=0,n_elements(guess)-1 do begin
     gauss_fit_worked=[gauss_fit_worked,0]
 
     endif else begin 
-;      print,'status:',status
       if status lt 1 then begin
         IF KEYWORD_SET(makeplots) THEN BEGIN
           cgplot,locations,gaussian(locations,estimates),/overplot,linestyle=2
@@ -358,7 +333,6 @@ for i=0,n_elements(guess)-1 do begin
   
   
 for i=0,n_elements(calculated_params)-1 do BEGIN
-
   skipcalcp=0
   t=execute("if min(calcP"+SSI(I)+") - max(calcP"+ssi(i)+") eq 0 then skipcalcp=1")
   if skipcalcp eq 1 then goto,skipcalcp_location
@@ -398,8 +372,8 @@ for i=0,n_elements(calculated_params)-1 do BEGIN
         cgplot,locations,dummy,/overplot
         cgtext,0.2,0.9,ssf(coeff[1]),/normal
         cgtext,0.2,0.85,ssf(coeff[2]),/normal
-          cgtext,0.2,0.75,ssf(bestval),/normal
-          cgtext,0.2,0.70,ssf(sigval),/normal
+        cgtext,0.2,0.75,ssf(bestval),/normal
+        cgtext,0.2,0.70,ssf(sigval),/normal
         ENDIF
       return_value=[return_value,coeff[1]]
       return_value_errs=[return_value_errs,coeff[2]]
@@ -410,12 +384,10 @@ for i=0,n_elements(calculated_params)-1 do BEGIN
     t=execute("return_value=[return_value,min(calcP"+SSI(I)+")]")
     return_value_errs=[return_value_errs,0.0]
     gauss_fit_worked=[gauss_fit_worked,0]
-    endif
-  
+    endif ;skipcalcp
   endfor  ;calculated_params
 bail:
-;stop
-print,'time taken:',abs(TIMEvar-systime(/seconds)),' sec'
+if ~keyword_set(silent) then print,'time taken:',abs(TIMEvar-systime(/seconds)),' sec'
 PERROR=return_value_errs
 return,return_value
 end
