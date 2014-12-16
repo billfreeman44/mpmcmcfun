@@ -122,10 +122,6 @@ readcol_str=''
 for i=0,n_elements(guess)-1 do readcol_str=readcol_str+'ch'+ssi(i)+','
 for i=0,n_elements(calculated_params)-1 do readcol_str=readcol_str+'calcP'+ssi(i)+','
 
-;read_str=''
-;for i=0,n_elements(guess)-1 do read_str=read_str+'chtemp'+ssi(i)+','
-;for i=0,n_elements(calculated_params)-1 do read_str=read_str+'calcPtemp'+ssi(i)+','
-;
 ;put_str=''
 ;for i=0,n_elements(guess)-1 do read_str=read_str+'chtemp'+ssi(i)+','
 ;for i=0,n_elements(calculated_params)-1 do read_str=read_str+'calcPtemp'+ssi(i)+','
@@ -192,7 +188,8 @@ for i=0l,n_iter do begin
     endfor   
 
   if limit_exceeded eq 0 then begin
-    t=execute('yout='+MYFUNCT+'(xin,guess)')
+    YOUT=call_function(myfunct,xin,guess)
+;    t=execute('yout='+MYFUNCT+'(xin,guess)')
     l=likelih_mpmcmcfun(xin,yin,yinerr,yout)
     l=10^double(l)
     endif else l=0.0
@@ -235,22 +232,33 @@ return_value_errs=[]
 gauss_fit_worked=[]
 if ~keyword_set(silent) then PRINT,'about to read'
 ;;an attempt to not use readcol.
-;for i=0,n_elements(guess)-1 do t=execute('ch'+ssi(i)+'=fltarr(n_iter)')
-;for i=0,n_elements(calculated_params)-1 do t=execute('calcP'+ssi(i)+'=fltarr(n_iter)')
-;l=0l
-;openr,lun_read,temp_filename,/get_lun
-;WHILE EOF(lun_read) eq 0 DO BEGIN 
-;  t=execute('readf,lun_read,'+read_str+'format="('+format_str+')"')
-;  l=l+1l
-;ENDWHILE
-;close,lun_read
-;free_lun,lun_read
-;
-;stop
-;openr,lun_read,temp_filename,/get_lun
-;t=execute('readf,lun_read,'+readcol_str+'format="('+format_str+')"')
-
-t=execute('readcol,"'+temp_filename+'",'+readcol_str+'format="'+format_str+'",/silent')
+if n_elements(guess)+n_elements(calculated_params) gt 39 then begin
+  TIMEvar_read=systime(/seconds)
+  read_str=''
+  for i=0,n_elements(guess)-1 do read_str=read_str+'chtemp'+ssi(i)+','
+  for i=0,n_elements(calculated_params)-1 do read_str=read_str+'calcPtemp'+ssi(i)+','
+  nchain=file_lines(temp_filename)
+  for i=0,n_elements(guess)-1 do t=execute('ch'+ssi(i)+'=fltarr(nchain)')
+  for i=0,n_elements(calculated_params)-1 do t=execute('calcP'+ssi(i)+'=fltarr(nchain)')
+  l=0l
+  openr,lun_read,temp_filename,/get_lun
+  WHILE EOF(lun_read) eq 0 DO BEGIN 
+    t=execute('readf,lun_read,'+read_str+'format="('+format_str+')"')
+    for i=0,n_elements(guess)-1 do t=execute('ch'+ssi(i)+'[l]=chtemp'+ssi(i))
+    for i=0,n_elements(calculated_params)-1 do t=execute('calcP'+ssi(i)+'[l]=calcPtemp'+ssi(i))
+    l=l+1l
+  ENDWHILE
+  close,lun_read
+  free_lun,lun_read
+;  print,'read time:',systime(/seconds)-TIMEvar_read
+;  print,n_elements(ch0)
+  endif else begin
+    TIMEvar_read=systime(/seconds)
+    t=execute('readcol,"'+temp_filename+'",'+readcol_str+'format="'+format_str+'",/silent')
+;    print,'readcol time:',systime(/seconds)-TIMEvar_read
+;    print,n_elements(ch0)
+;    stop
+    endelse
 
 ;check if reading in data failed.
 if t ne 1 then begin
