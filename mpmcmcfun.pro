@@ -57,13 +57,13 @@
 ;  
 ;
 ;          
-; :Examples:
+;EXAMPLES
 ;    Some of the ways mpmcmcmfun can be used::
 ;    
 ;       
 ;       
 ;        
-; :Author:
+;AUTHOR
 ;       Bill Freeman:
 ;        Billfreeman44@yahoo.com
 ;
@@ -75,7 +75,8 @@
 ;calculated_params could be like ["p[1]*p[2]","p[4]*p[2]/P[6]"]
 function mpmcmcfun,MYFUNCT, X, Y, ERR, P,P_SIGMA,n_iter ,parinfo=parinfo,$
   PERROR=PERROR,calculated_params=calculated_params,titles=titles,makeplots=makeplots,status_MCMC=status_MCMC,$
-  gauss_fit_worked=gauss_fit_worked,makecontours=makecontours,silent=silent,quiet=quiet,temp_filename=temp_filename
+  gauss_fit_worked=gauss_fit_worked,makecontours=makecontours,silent=silent,quiet=quiet,temp_filename=temp_filename,$
+  format_str=format_str
 if n_params() ne 7 then message,'syntax: result=mpfitfun_mcmc(MYFUNCT, X, Y, ERR,'+$
   ' P,P_SIGMA,n_iter ,parinfo,PERROR=PERROR,calculated_params=calculated_params,titles=titles'+$
   ',makeplots=makeplots,status_MCMC=status_MCMC,$'+$
@@ -110,15 +111,24 @@ guess_old=guess
 openw,lun,temp_filename,/get_lun
 
 ;calculate formatting string.
-format_str=''
+if ~keyword_set(format_str) then begin
+  format_str=''
+  for i=0,n_elements(guess)-1 do format_str=format_str+'F13.5,'
+  for i=0,n_elements(calculated_params)-1 do format_str=format_str+'F13.5,'
+  format_str=strmid(format_str,0,strlen(format_str)-1)
+  endif
+
 readcol_str=''
-for i=0,n_elements(guess)-1 do format_str=format_str+'F13.5,'
-for i=0,n_elements(calculated_params)-1 do format_str=format_str+'F13.5,'
-format_str=strmid(format_str,0,strlen(format_str)-1)
 for i=0,n_elements(guess)-1 do readcol_str=readcol_str+'ch'+ssi(i)+','
 for i=0,n_elements(calculated_params)-1 do readcol_str=readcol_str+'calcP'+ssi(i)+','
-;print,readcol_str
 
+;read_str=''
+;for i=0,n_elements(guess)-1 do read_str=read_str+'chtemp'+ssi(i)+','
+;for i=0,n_elements(calculated_params)-1 do read_str=read_str+'calcPtemp'+ssi(i)+','
+;
+;put_str=''
+;for i=0,n_elements(guess)-1 do read_str=read_str+'chtemp'+ssi(i)+','
+;for i=0,n_elements(calculated_params)-1 do read_str=read_str+'calcPtemp'+ssi(i)+','
 
 ;initial guess likelihood
 t=execute('yout='+MYFUNCT+'(xin,guess)')
@@ -143,12 +153,14 @@ if l_old eq 0 then begin
 guess_small_indicies=where(parinfo.fixed eq 0 and (parinfo.tied eq '' or parinfo.tied eq ' '))
 guess_small=guess[guess_small_indicies]
 guess_small_old=guess_small
-fixed_pars=where(parinfo.tied ne '' and parinfo.tied ne ' ')
+fixed_pars=where(parinfo.tied ne '' and parinfo.tied ne ' ',/null)
 
 ;check for 0 sigma
 for i=0,n_elements(guess_small_indicies)-1 do $
-  if P_SIGMA[guess_small_indicies[i]] le 0 then $
+  if P_SIGMA[guess_small_indicies[i]] le 0 then begin
+    status_MCMC=0
     message,'WARNING: negative or zero sigma.'
+    endif
 
 ;counter setup
 n_better=0
@@ -186,7 +198,6 @@ for i=0l,n_iter do begin
     endif else l=0.0
 
   if l / l_old gt randomu(seed) then begin
-    if l eq 0 then message,'bad'
     ;fit is better
     guess_old=guess
     guess_small_old=guess[guess_small_indicies]
@@ -217,24 +228,40 @@ if n_better lt 0.01*n_iter then begin
   return,p
   endif
 
-
-
 ;ENTER MAIN PLOTTING AND ANALYSIS SECTION.
 !p.multi=[0,1,1]
 return_value=[]
 return_value_errs=[]
 gauss_fit_worked=[]
-if ~keyword_set(silent) then PRINT,'about to readcol'
+if ~keyword_set(silent) then PRINT,'about to read'
+;;an attempt to not use readcol.
+;for i=0,n_elements(guess)-1 do t=execute('ch'+ssi(i)+'=fltarr(n_iter)')
+;for i=0,n_elements(calculated_params)-1 do t=execute('calcP'+ssi(i)+'=fltarr(n_iter)')
+;l=0l
+;openr,lun_read,temp_filename,/get_lun
+;WHILE EOF(lun_read) eq 0 DO BEGIN 
+;  t=execute('readf,lun_read,'+read_str+'format="('+format_str+')"')
+;  l=l+1l
+;ENDWHILE
+;close,lun_read
+;free_lun,lun_read
+;
+;stop
+;openr,lun_read,temp_filename,/get_lun
+;t=execute('readf,lun_read,'+readcol_str+'format="('+format_str+')"')
 
 t=execute('readcol,"'+temp_filename+'",'+readcol_str+'format="'+format_str+'",/silent')
+
+;check if reading in data failed.
 if t ne 1 then begin
   help
-  print,'failure readcolng'
+  print,'failure reading in data'
   status_MCMC=0
   close,lun
   free_lun,lun
   return,p
   endif
+  
 if ~keyword_set(silent) then print,'after readcol'
 for i=0,n_elements(guess)-1 do begin
   ;check if data was not fit and fixed to constant.
