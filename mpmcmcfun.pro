@@ -108,9 +108,8 @@
 ; IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 ; DEALINGS IN THE SOFTWARE.
 ;
-
-;      
-
+;
+;
 ;;git commit -a -m ''
 ;result=mpfitfun('mp_sngle_gauss_n2',wavel[index],data[index],err[index],p,parinfo=pi,/QUIET,status=status,DOF=DOF,PERROR=PERROR1)
 ;parinfo should have these 3: {fixed:0, limited:[1,1], limits:[0.D,1.2d], tied:''}
@@ -343,13 +342,13 @@ for i=0,n_elements(guess)-1 do begin
   ;plot all contours.
   if keyword_set(makecontours) then begin
     for j=i+1,n_elements(guess)-1 do begin
-        skipcontour=1
-        t=execute("if min(CH"+SSI(I)+") - max(CH"+ssi(i)+") eq 0 then skipcontour=1")
-        t=execute("if min(CH"+SSI(J)+") - max(CH"+ssi(J)+") eq 0 then skipcontour=1")
-        if skipcontour eq 1 then goto,skipcontour_location
+      skipcontour=1
+      t=execute("if min(CH"+SSI(I)+") - max(CH"+ssi(i)+") eq 0 then skipcontour=1")
+      t=execute("if min(CH"+SSI(J)+") - max(CH"+ssi(J)+") eq 0 then skipcontour=1")
+      if skipcontour eq 1 then goto,skipcontour_location
       t=execute("xr=minmax(CH"+SSI(I)+")")
       t=execute("yr=minmax(CH"+SSI(j)+")")
-  ;    t=execute("cgplot,ch"+SSI(I)+",ch"+SSI(J)+",xtitle=titles[i],ytitle=titles[j],psym=6,/ynozero,/ys,/xs,xr=xr,yr=yr,symsize=0.1")
+      ;t=execute("cgplot,ch"+SSI(I)+",ch"+SSI(J)+",xtitle=titles[i],ytitle=titles[j],psym=6,/ynozero,/ys,/xs,xr=xr,yr=yr,symsize=0.1")
       t=execute("binx=(max(ch"+SSI(I)+")-min(ch"+SSI(I)+"))/15.0")
       t=execute("biny=(max(ch"+SSI(j)+")-min(ch"+SSI(j)+"))/15.0")
       t=execute("density=hist_2d(ch"+SSI(I)+",ch"+SSI(j)+",bin1=binx,bin2=biny,min1=min(ch"+SSI(I)+"),max1=max(ch"+SSI(I)+$
@@ -362,7 +361,6 @@ for i=0,n_elements(guess)-1 do begin
       while n_elements(y_locations) lt n_elements(density[0,*]) do y_locations=[y_locations,y_locations[-1]+biny]
       x_locations=x_locations+binx/2
       y_locations=y_locations+biny/2
-      
       contour,density,x_locations,y_locations,/ys,/xs,xr=xr,yr=yr,xtitle=titles[i],ytitle=titles[j]
         skipcontour_location:
       endfor;contour j
@@ -374,7 +372,6 @@ for i=0,n_elements(guess)-1 do begin
     t=execute("return_value=[return_value,min(CH"+SSI(I)+")]")
     return_value_errs=[return_value_errs,0.0]
     gauss_fit_worked=[gauss_fit_worked,0]
-
     endif else begin 
       if status lt 1 then begin
         IF KEYWORD_SET(makeplots) THEN BEGIN
@@ -382,23 +379,22 @@ for i=0,n_elements(guess)-1 do begin
           cgtext,0.2,0.9,ssf(bestval),/normal
           cgtext,0.2,0.85,ssf(sigval),/normal
           ENDIF
-      return_value=[return_value,bestval]
-      return_value_errs=[return_value_errs,sigval]
-      gauss_fit_worked=[gauss_fit_worked,0]
-      
-      endif else begin
-        IF KEYWORD_SET(makeplots) THEN BEGIN
-          cgplot,locations,dummy,/overplot
-          cgplot,locations,gaussian(locations,estimates),/overplot,linestyle=2
-          cgtext,0.2,0.9,ssf(coeff[1]),/normal
-          cgtext,0.2,0.85,ssf(coeff[2]),/normal
-          cgtext,0.2,0.75,ssf(bestval),/normal
-          cgtext,0.2,0.70,ssf(sigval),/normal
-          ENDIF
-        return_value=[return_value,coeff[1]]
-        return_value_errs=[return_value_errs,coeff[2]]
-        gauss_fit_worked=[gauss_fit_worked,1]
-      endelse ;not status ne 1
+        return_value=[return_value,bestval]
+        return_value_errs=[return_value_errs,sigval]
+        gauss_fit_worked=[gauss_fit_worked,0]
+        endif else begin
+          IF KEYWORD_SET(makeplots) THEN BEGIN
+            cgplot,locations,dummy,/overplot
+            cgplot,locations,gaussian(locations,estimates),/overplot,linestyle=2
+            cgtext,0.2,0.9,ssf(coeff[1]),/normal
+            cgtext,0.2,0.85,ssf(coeff[2]),/normal
+            cgtext,0.2,0.75,ssf(bestval),/normal
+            cgtext,0.2,0.70,ssf(sigval),/normal
+            ENDIF
+          return_value=[return_value,coeff[1]]
+          return_value_errs=[return_value_errs,coeff[2]]
+          gauss_fit_worked=[gauss_fit_worked,1]
+        endelse ;not status ne 1
     ENDELSE ; not skipguess
   endfor;all guesses
 
