@@ -39,34 +39,76 @@
 ;    n_iter: Number of iterations.
 ;       
 ;KEYWORDS
+;
 ;  parinfo: Just like parinfo in mpfitfun, although this parinfo CANNOT TAKE EVERY PARAMETER
 ;     THAT THE NORMAL PARINFO IN MPFIT CAN.  It can only do these three:
 ;     {fixed:0, limited:[1,1], limits:[0.0D,0.0d], tied:''}
 ;     
 ;  PERROR: One sigma errors in the fit.  This is usually the one sigma fit to the gaussian histogram.
 ;     if there is no good fit, then 
+;     
 ;  calculated_params: An array of strings of things to calculate using P[#] for each parameter.  For
 ;     instance: ["p[1]*p[2]","p[4]*p[2]/P[6]"] would work.  It must be an array.
-;  titles:
-;  makeplots:
-;  status_MCMC:
-;  gauss_fit_worked:
-;  makecontours:
+;     
+;  titles: An array of strings to be the plot titles.  THIS MUST INCLUDE THE CALCULATED PARAMS AS WELL. See
+;     the example program.
+;     
+;  makeplots: Flag for weather or not to make plots.  Uses cgplot.  You should have run ps_start before.
+;     see the example as well.
+;     
+;  status_MCMC: output.  1 if the fit went ok, 0 if it failed.  I recommend you check this.
+;  
+;  gauss_fit_worked: output array in parallel with your guesses and calculated parameters.  1  if the gaussian
+;     fit worked and 0 if it didin't.
+;     
+;  makecontours: Flag for weather or not to make contours.  Uses cgcontour.  You should have run ps_start before.
+;     see the example as well.  Makes contours for each parameter.
+;  
 ;  silent or quiet: set either to not output any text
-;  temp_filename:
+;  
+;  temp_filename:  This program needs to write to a text file.  You can specifiy the path and name using this 
+;     keyword.  Otherwise it defaults to '~/mcmc_test.txt'
 ;  
 ;
 ;          
 ;EXAMPLES
-;    Some of the ways mpmcmcmfun can be used::
+;    See mpmcmcfun_test.pro
 ;    
-;       
 ;       
 ;        
 ;AUTHOR
 ;       Bill Freeman:
 ;        Billfreeman44@yahoo.com
 ;
+;
+;
+;
+;
+;Copyright (c) 2014 William R. Freeman
+;
+;Permission is hereby granted, free of charge, to any person 
+;obtaining a copy of this software and associated documentation
+;files (the "Software"), to deal in the Software without restriction, 
+;including without limitation the rights to use, copy, modify, merge,
+;publish, distribute, sublicense, and/or sell copies of the 
+;Software, and to permit persons to whom the Software is furnished 
+;to do so, subject to the following conditions:
+;
+;The above copyright notice and this permission 
+;notice shall be included in all copies or substantial 
+;portions of the Software.
+;
+;THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY 
+;OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
+; TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A 
+; PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+; THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+; DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF 
+; CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR 
+; IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+; DEALINGS IN THE SOFTWARE.
+;
+
 ;      
 
 ;;git commit -a -m ''
@@ -118,30 +160,22 @@ if ~keyword_set(format_str) then begin
   format_str=strmid(format_str,0,strlen(format_str)-1)
   endif
 
+;calculate string to use during readcol
 readcol_str=''
 for i=0,n_elements(guess)-1 do readcol_str=readcol_str+'ch'+ssi(i)+','
 for i=0,n_elements(calculated_params)-1 do readcol_str=readcol_str+'calcP'+ssi(i)+','
 
-;put_str=''
-;for i=0,n_elements(guess)-1 do read_str=read_str+'chtemp'+ssi(i)+','
-;for i=0,n_elements(calculated_params)-1 do read_str=read_str+'calcPtemp'+ssi(i)+','
-
 ;initial guess likelihood
 t=execute('yout='+MYFUNCT+'(xin,guess)')
 if t eq 0 then message,'bad MYFUNCT'
-;print,'yout='+MYFUNCT+'(xin,guess)'
 l=likelih_mpmcmcfun(xin,yin,yinerr,yout)
 l_old=10^double(l)
-;stop
-;print,guess
-;print,l_old
 if l_old eq 0 then begin
   print,'initial guess likleihood is 0, check initial parameters.'
   status_MCMC=0
   close,lun
   free_lun,lun
   return,p
-    
   endif
 
 ;calc which parameters are free. guess_small has only free parameters where guess has all of them.
@@ -163,8 +197,9 @@ n_better=0
 n_worse=0
 np=float(n_elements(guess_small))
 
-
+;======================================================================
 ;ENTER MAIN LOOP OF MCMC.
+;======================================================================
 for i=0l,n_iter do begin
   if i mod 10000 eq 0 then if ~keyword_set(silent) then print,'on step number '+ssi(i)
   ;change one random parameter by random amount 
@@ -209,23 +244,26 @@ for i=0l,n_iter do begin
       guess_small=guess_small_old
       n_worse=n_worse+1l
       endelse  
-  
-  endfor
+  endfor ; n_iter
+
 close,lun
 free_lun,lun
 if ~keyword_set(silent) then print,'n better ',n_better,double(n_better)/double(n_iter)
 if ~keyword_set(silent) then print,'n worse ', n_worse,double(n_worse)/double(n_iter)
 
-if n_better lt 0.01*n_iter then begin
+;check if low number of successful/failed jumps
+if n_better lt 0.01*n_iter or n_worse lt 0.01*n_iter then begin
   help
-  print,'not enough better soultions.'
+  print,'not enough better/worse soultions.'
   status_MCMC=0
   close,lun
   free_lun,lun
   return,p
   endif
 
+;======================================================================
 ;ENTER MAIN PLOTTING AND ANALYSIS SECTION.
+;======================================================================
 !p.multi=[0,1,1]
 return_value=[]
 return_value_errs=[]
@@ -296,12 +334,12 @@ for i=0,n_elements(guess)-1 do begin
     estimates=estimates,parinfo=pi2,status=status,chisq=chisq)
   
   
-    if (parinfo[i].tied eq '' or parinfo[i].tied eq ' ') AND PARINFO[i].fixed ne 1 then begin 
-      if parinfo[i].limited[0] eq 1 then if coeff[1] lt parinfo[i].limits[0] then coeff[1]=parinfo[i].limits[0]
-      if parinfo[i].limited[1] eq 1 then if coeff[1] gt parinfo[i].limits[1] then coeff[1]=parinfo[i].limits[1]
-      endif;fixed parinfo
+  if (parinfo[i].tied eq '' or parinfo[i].tied eq ' ') AND PARINFO[i].fixed ne 1 then begin 
+    if parinfo[i].limited[0] eq 1 then if coeff[1] lt parinfo[i].limits[0] then coeff[1]=parinfo[i].limits[0]
+    if parinfo[i].limited[1] eq 1 then if coeff[1] gt parinfo[i].limits[1] then coeff[1]=parinfo[i].limits[1]
+    endif;fixed parinfo
 
-;;CONTOURS.
+  ;;CONTOURS.
   ;plot all contours.
   if keyword_set(makecontours) then begin
     for j=i+1,n_elements(guess)-1 do begin
@@ -360,13 +398,11 @@ for i=0,n_elements(guess)-1 do begin
         return_value=[return_value,coeff[1]]
         return_value_errs=[return_value_errs,coeff[2]]
         gauss_fit_worked=[gauss_fit_worked,1]
-  ;      PRINT,'PROPERLY DOING RETURN VALUES'
       endelse ;not status ne 1
     ENDELSE ; not skipguess
   endfor;all guesses
-  
-  
-  
+
+;analyze calculated parameters (just like the parameters)
 for i=0,n_elements(calculated_params)-1 do BEGIN
   skipcalcp=0
   t=execute("if min(calcP"+SSI(I)+") - max(calcP"+ssi(i)+") eq 0 then skipcalcp=1")
