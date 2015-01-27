@@ -18,7 +18,7 @@ y=y +randomn(seed,nel)*errs
         
   result1=mpfitfun('gaussian',x,y,errs,p,parinfo=pi,/QUIET,status=status,PERROR=PERROR1)
 ;  stop
-  ps_start,'~/mcmc_test.ps'
+  ps_start,'mcmc_test.ps'
   titles=['peak value','peak centroid','sigma','flux(ish)']
   calculated_params=['p[0]*p[1]']
   result2=mpmcmcfun('gaussian',x,y,errs,result1,perror1,n_iter,parinfo=pi,status=status,PERROR=PERROR2,/makeplots,/makecontours,$

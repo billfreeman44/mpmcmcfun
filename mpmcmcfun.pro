@@ -116,7 +116,7 @@
 ;calculated_params could be like ["p[1]*p[2]","p[4]*p[2]/P[6]"]
 function mpmcmcfun,MYFUNCT, X, Y, ERR, P,P_SIGMA,n_iter ,parinfo=parinfo,$
   PERROR=PERROR,calculated_params=calculated_params,titles=titles,makeplots=makeplots,status_MCMC=status_MCMC,$
-  gauss_fit_worked=gauss_fit_worked,makecontours=makecontours,silent=silent,quiet=quiet,temp_filename=temp_filename,$
+  gauss_fit_worked=gauss_fit_worked,makecontours=makecontours,silent=silent,quiet=quiet,$
   format_str=format_str
 if n_params() ne 7 then message,'syntax: result=mpfitfun_mcmc(MYFUNCT, X, Y, ERR,'+$
   ' P,P_SIGMA,n_iter ,parinfo,PERROR=PERROR,calculated_params=calculated_params,titles=titles'+$
@@ -131,14 +131,9 @@ if keyword_set(quiet) then silent=1
 if ~keyword_set(calculated_params) then begin
   calculated_params=[]
   calculate_pars=0
-  endif else begin 
-    calculate_par_str=''
-    for i=0,n_elements(calculated_params)-1 do calculate_par_str=calculate_par_str+calculated_params[i]+','
-    calculate_pars=1
-    endelse
+  endif else calculate_pars=1
 if ~keyword_set(titles) then titles=replicate(' ',n_elements(P)+n_elements(calculated_params))
 if ~keyword_set(parinfo) then parinfo=replicate({fixed:0, limited:[0,0], limits:[0.D,0.d], tied:''},n_elements(p))
-if ~keyword_set(temp_filename) then temp_filename='~/mcmc_test.txt'
 
 ;ensure double precision
 xin=double(X)
@@ -147,22 +142,8 @@ yinerr=double(ERR)
 seed=1234d
 guess=P
 guess_old=guess
+guess_arr=replicate(0.d,n_elements(guess),n_iter)
 
-;temporary text file to save mcmc chain
-openw,lun,temp_filename,/get_lun
-
-;calculate formatting string.
-if ~keyword_set(format_str) then begin
-  format_str=''
-  for i=0,n_elements(guess)-1 do format_str=format_str+'F13.5,'
-  for i=0,n_elements(calculated_params)-1 do format_str=format_str+'F13.5,'
-  format_str=strmid(format_str,0,strlen(format_str)-1)
-  endif
-
-;calculate string to use during readcol
-readcol_str=''
-for i=0,n_elements(guess)-1 do readcol_str=readcol_str+'ch'+ssi(i)+','
-for i=0,n_elements(calculated_params)-1 do readcol_str=readcol_str+'calcP'+ssi(i)+','
 
 ;initial guess likelihood
 t=execute('yout='+MYFUNCT+'(xin,guess)')
@@ -172,8 +153,8 @@ l_old=10^double(l)
 if l_old eq 0 then begin
   print,'initial guess likleihood is 0, check initial parameters.'
   status_MCMC=0
-  close,lun
-  free_lun,lun
+;  close,lun
+;  free_lun,lun
   return,p
   endif
 
@@ -192,15 +173,15 @@ for i=0,n_elements(guess_small_indicies)-1 do $
     endif
 
 ;counter setup
-n_better=0
-n_worse=0
+n_better=0l
+n_worse=0l
 np=float(n_elements(guess_small))
 
 ;======================================================================
 ;ENTER MAIN LOOP OF MCMC.
 ;======================================================================
 for i=0l,n_iter do begin
-  if i mod 10000 eq 0 then if ~keyword_set(silent) then print,'on step number '+ssi(i)
+  ;if i mod 10000 eq 0 then if ~keyword_set(silent) then print,'on step number '+ssi(i)
   ;change one random parameter by random amount 
   r=randomu(seed)
   for j=0,n_elements(guess_small)-1 do $
@@ -223,7 +204,6 @@ for i=0l,n_iter do begin
 
   if limit_exceeded eq 0 then begin
     YOUT=call_function(myfunct,xin,guess)
-;    t=execute('yout='+MYFUNCT+'(xin,guess)')
     l=likelih_mpmcmcfun(xin,yin,yinerr,yout)
     l=10^double(l)
     endif else l=0.0
@@ -234,9 +214,7 @@ for i=0l,n_iter do begin
     guess_small_old=guess[guess_small_indicies]
     l_old=l
     n_better=n_better+1l  
-    ;output chain and calculated parameters.
-    if calculate_pars eq 1 then t=execute('printf,lun,guess,'+calculate_par_str+'format="('+format_str+')"') $
-      else printf,lun,guess,format='('+format_str+')'
+    guess_arr[*,n_better-1]=guess
     endif else begin
       ;fit is worse
       guess=guess_old
@@ -245,8 +223,8 @@ for i=0l,n_iter do begin
       endelse  
   endfor ; n_iter
 
-close,lun
-free_lun,lun
+;close,lun
+;free_lun,lun
 if ~keyword_set(silent) then print,'n better ',n_better,double(n_better)/double(n_iter)
 if ~keyword_set(silent) then print,'n worse ', n_worse,double(n_worse)/double(n_iter)
 
@@ -255,8 +233,6 @@ if n_better lt 0.01*n_iter or n_worse lt 0.01*n_iter then begin
   help
   print,'not enough better/worse soultions.'
   status_MCMC=0
-  close,lun
-  free_lun,lun
   return,p
   endif
 
@@ -267,47 +243,8 @@ if n_better lt 0.01*n_iter or n_worse lt 0.01*n_iter then begin
 return_value=[]
 return_value_errs=[]
 gauss_fit_worked=[]
-if ~keyword_set(silent) then PRINT,'about to read'
-;;an attempt to not use readcol.
-if n_elements(guess)+n_elements(calculated_params) gt 39 then begin
-  TIMEvar_read=systime(/seconds)
-  read_str=''
-  for i=0,n_elements(guess)-1 do read_str=read_str+'chtemp'+ssi(i)+','
-  for i=0,n_elements(calculated_params)-1 do read_str=read_str+'calcPtemp'+ssi(i)+','
-  nchain=file_lines(temp_filename)
-  for i=0,n_elements(guess)-1 do t=execute('ch'+ssi(i)+'=fltarr(nchain)')
-  for i=0,n_elements(calculated_params)-1 do t=execute('calcP'+ssi(i)+'=fltarr(nchain)')
-  l=0l
-  openr,lun_read,temp_filename,/get_lun
-  WHILE EOF(lun_read) eq 0 DO BEGIN 
-    t=execute('readf,lun_read,'+read_str+'format="('+format_str+')"')
-    for i=0,n_elements(guess)-1 do t=execute('ch'+ssi(i)+'[l]=chtemp'+ssi(i))
-    for i=0,n_elements(calculated_params)-1 do t=execute('calcP'+ssi(i)+'[l]=calcPtemp'+ssi(i))
-    l=l+1l
-  ENDWHILE
-  close,lun_read
-  free_lun,lun_read
-;  print,'read time:',systime(/seconds)-TIMEvar_read
-;  print,n_elements(ch0)
-  endif else begin
-    TIMEvar_read=systime(/seconds)
-    t=execute('readcol,"'+temp_filename+'",'+readcol_str+'format="'+format_str+'",/silent')
-;    print,'readcol time:',systime(/seconds)-TIMEvar_read
-;    print,n_elements(ch0)
-;    stop
-    endelse
+for i=0,n_elements(guess)-1 do t=execute("CH"+SSI(I)+"=guess_arr["+ssi(i)+",0:n_better-1]")
 
-;check if reading in data failed.
-if t ne 1 then begin
-  help
-  print,'failure reading in data'
-  status_MCMC=0
-  close,lun
-  free_lun,lun
-  return,p
-  endif
-  
-if ~keyword_set(silent) then print,'after readcol'
 for i=0,n_elements(guess)-1 do begin
   ;check if data was not fit and fixed to constant.
   skipguess=0
@@ -338,33 +275,6 @@ for i=0,n_elements(guess)-1 do begin
     if parinfo[i].limited[1] eq 1 then if coeff[1] gt parinfo[i].limits[1] then coeff[1]=parinfo[i].limits[1]
     endif;fixed parinfo
 
-  ;;CONTOURS.
-  ;plot all contours.
-  if keyword_set(makecontours) then begin
-    for j=i+1,n_elements(guess)-1 do begin
-      skipcontour=1
-      t=execute("if min(CH"+SSI(I)+") - max(CH"+ssi(i)+") eq 0 then skipcontour=1")
-      t=execute("if min(CH"+SSI(J)+") - max(CH"+ssi(J)+") eq 0 then skipcontour=1")
-      if skipcontour eq 1 then goto,skipcontour_location
-      t=execute("xr=minmax(CH"+SSI(I)+")")
-      t=execute("yr=minmax(CH"+SSI(j)+")")
-      ;t=execute("cgplot,ch"+SSI(I)+",ch"+SSI(J)+",xtitle=titles[i],ytitle=titles[j],psym=6,/ynozero,/ys,/xs,xr=xr,yr=yr,symsize=0.1")
-      t=execute("binx=(max(ch"+SSI(I)+")-min(ch"+SSI(I)+"))/15.0")
-      t=execute("biny=(max(ch"+SSI(j)+")-min(ch"+SSI(j)+"))/15.0")
-      t=execute("density=hist_2d(ch"+SSI(I)+",ch"+SSI(j)+",bin1=binx,bin2=biny,min1=min(ch"+SSI(I)+"),max1=max(ch"+SSI(I)+$
-        "),min2=min(ch"+SSI(j)+"),max2=max(ch"+SSI(j)+"))")
-      
-      ;calcluate bin locations
-      t=execute("x_locations=[min (ch"+SSI(I)+")]")
-      while n_elements(x_locations) lt n_elements(density[*,0]) do x_locations=[x_locations,x_locations[-1]+binx]
-      t=execute("y_locations=[min (ch"+SSI(J)+")]")
-      while n_elements(y_locations) lt n_elements(density[0,*]) do y_locations=[y_locations,y_locations[-1]+biny]
-      x_locations=x_locations+binx/2
-      y_locations=y_locations+biny/2
-      contour,density,x_locations,y_locations,/ys,/xs,xr=xr,yr=yr,xtitle=titles[i],ytitle=titles[j]
-        skipcontour_location:
-      endfor;contour j
-    endif;contour keyword.
 
 
   skipguess_location:
@@ -395,15 +305,64 @@ for i=0,n_elements(guess)-1 do begin
           return_value_errs=[return_value_errs,coeff[2]]
           gauss_fit_worked=[gauss_fit_worked,1]
         endelse ;not status ne 1
+      
+      ;;CONTOURS.
+      ;plot all contours.
+      if keyword_set(makecontours) then begin
+        for j=i+1,n_elements(guess)-1 do begin
+          skipcontour=0
+          t=execute("if min(CH"+SSI(I)+") - max(CH"+ssi(i)+") eq 0 then skipcontour=1")
+          t=execute("if min(CH"+SSI(J)+") - max(CH"+ssi(J)+") eq 0 then skipcontour=1")
+          PRINT,SKIPCONTOUR
+          if skipcontour eq 1 then goto,skipcontour_location
+          t=execute("xr=minmax(CH"+SSI(I)+")")
+          t=execute("yr=minmax(CH"+SSI(j)+")")
+          ;t=execute("cgplot,ch"+SSI(I)+",ch"+SSI(J)+",xtitle=titles[i],ytitle=titles[j],psym=6,/ynozero,/ys,/xs,xr=xr,yr=yr,symsize=0.1")
+          t=execute("binx=(max(ch"+SSI(I)+")-min(ch"+SSI(I)+"))/15.0")
+          t=execute("biny=(max(ch"+SSI(j)+")-min(ch"+SSI(j)+"))/15.0")
+          t=execute("density=hist_2d(ch"+SSI(I)+",ch"+SSI(j)+",bin1=binx,bin2=biny,min1=min(ch"+SSI(I)+"),max1=max(ch"+SSI(I)+$
+            "),min2=min(ch"+SSI(j)+"),max2=max(ch"+SSI(j)+"))")
+          
+          ;calcluate bin locations
+          t=execute("x_locations=[min (ch"+SSI(I)+")]")
+          while n_elements(x_locations) lt n_elements(density[*,0]) do x_locations=[x_locations,x_locations[-1]+binx]
+          t=execute("y_locations=[min (ch"+SSI(J)+")]")
+          while n_elements(y_locations) lt n_elements(density[0,*]) do y_locations=[y_locations,y_locations[-1]+biny]
+          x_locations=x_locations+binx/2
+          y_locations=y_locations+biny/2
+          contour,density,x_locations,y_locations,/ys,/xs,xr=xr,yr=yr,xtitle=titles[i],ytitle=titles[j]
+            skipcontour_location:
+          endfor;contour j
+        endif;contour keyword.  
     ENDELSE ; not skipguess
   endfor;all guesses
+
+
+
+
 
 ;analyze calculated parameters (just like the parameters)
 for i=0,n_elements(calculated_params)-1 do BEGIN
   skipcalcp=0
+  calculate_par_str=STRLOWCASE(calculated_params[i])
+  p_position=strpos(calculate_par_str,'p')
+  while p_position ne -1 do begin
+    calculate_par_str=strmid(calculate_par_str,0,p_position)+"ch"+strmid(calculate_par_str,p_position+1)
+    p_position=strpos(calculate_par_str,'p')
+    endwhile
+  br_position=strpos(calculate_par_str,'[')
+  while br_position ne -1 do begin
+    calculate_par_str=strmid(calculate_par_str,0,br_position)+strmid(calculate_par_str,br_position+1)
+    br_position=strpos(calculate_par_str,'[')
+    endwhile
+  br_position=strpos(calculate_par_str,']')
+  while br_position ne -1 do begin
+    calculate_par_str=strmid(calculate_par_str,0,br_position)+strmid(calculate_par_str,br_position+1)
+    br_position=strpos(calculate_par_str,']')
+    endwhile
+  t=execute("calcP"+SSI(I)+"="+calculate_par_str)
   t=execute("if min(calcP"+SSI(I)+") - max(calcP"+ssi(i)+") eq 0 then skipcalcp=1")
   if skipcalcp eq 1 then goto,skipcalcp_location
-  
   if keyword_set(makeplots) THEN t=execute("cghistoplot,calcP"+SSI(I)+$
     ",nbins=50,title=titles[n_elements(guess)+i],histdata=histdata,locations=locations") $
       ELSE $
