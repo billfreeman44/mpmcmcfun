@@ -1,5 +1,5 @@
 
-Please see the wiki for instructions and restrictions and limitations etc...
+Please see the wiki for instructions and restrictions and limitations etc... https://github.com/billfreeman44/mpmcmcfun/wiki 
 
 
 ;Copyright (c) 2014 William R. Freeman
